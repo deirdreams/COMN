@@ -1,15 +1,19 @@
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 
-//The image should be split into multiple 1027B packets (one packet consists of 1024KB payload and 3B header).
+/**
+ * Created by s1368635 on 27/02/17.
+ */
+public class Sender1b {
 
-public class Sender1a {
+//    private long start = System.currentTimeMillis();
 
-    private static void send(InetAddress address, int portNum, String filename) throws IOException{
+    private static void send(InetAddress address, int portNum, String filename, int RetryTimeout) throws IOException {
         DatagramSocket socket = new DatagramSocket();
         System.out.println("Socket connected");
         byte[] buffer = new byte[1024];
@@ -19,9 +23,14 @@ public class Sender1a {
             short packNum = 0;
             int packLen;
             boolean last = false;
+            //Create different socket for receiver
+            DatagramSocket recSocket = new DatagramSocket(portNum+1);
+            boolean acknowledged = false;
+
             System.out.println("Sending packet...");
 
-            while(in.available() > 0) {
+            while(!last) {
+
                 int dataLeft = in.available();
 
                 if (dataLeft > buffer.length) {
@@ -43,6 +52,13 @@ public class Sender1a {
                 DatagramPacket sendPacket = new DatagramPacket(bytes, bytes.length, address, portNum);
                 socket.send(sendPacket);
 
+                //Check for acknowledgement
+                System.out.println("Waiting for acknowledgement...");
+                acknowledged = false;
+                while(!acknowledged) {
+                    acknowledged = isAcknowledged(packNum, RetryTimeout, recSocket);
+                    socket.send(sendPacket);
+                }
                 packNum++;
                 Thread.sleep(10);
             }
@@ -54,14 +70,36 @@ public class Sender1a {
         System.out.println("File sent!");
         socket.close();
 
+    }
+
+    public static boolean isAcknowledged(short packNum, int timeout, DatagramSocket rec) throws Exception{
+        byte[] recBuf = new byte[2];
+        DatagramPacket recPacket = new DatagramPacket(recBuf, recBuf.length);
+        rec.setSoTimeout(timeout);
+        try {
+            rec.receive(recPacket);
+            byte[] recData = recPacket.getData();
+            int ack = ByteBuffer.wrap(recData).getShort();
+            if (ack == packNum) {
+                System.out.println("Packets acknowledged");
+                return true;
+            }
+        } catch (SocketTimeoutException e) {
+            System.out.println("Socket timed out");
+            return false;
         }
+        return false;
+
+    }
 
     public static void main(String args[]) throws IOException{
         final InetAddress host = InetAddress.getByName(args[0]); //localhost
         int port = Integer.parseInt(args[1]);
         String filename = args[2];
+        int timeout = Integer.parseInt(args[3]);
 
-        send(host, port, filename);
+        send(host, port, filename, timeout);
 
     }
+
 }

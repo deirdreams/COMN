@@ -1,17 +1,21 @@
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.io.*;
-import java.util.Arrays;
+import java.nio.ByteBuffer;
 
-public class Receiver1a {
+/**
+ * Created by s1368635 on 27/02/17.
+ */
+public class Receiver1b {
 
     private static void receive(int portNum, String filename) throws IOException {
         try {
-            DatagramSocket socket = new DatagramSocket(portNum);
+            DatagramSocket recSocket = new DatagramSocket(portNum);
             File file = new File(filename);
             FileOutputStream out = new FileOutputStream(file);
+            short packNum = 0;
 
             boolean fileReceived = false;
             System.out.println("Receiving file...");
@@ -20,7 +24,7 @@ public class Receiver1a {
 
                 byte[] buffer = new byte[1027];
                 DatagramPacket recPacket = new DatagramPacket(buffer, buffer.length);
-                socket.receive(recPacket);
+                recSocket.receive(recPacket);
                 byte[] data = recPacket.getData();
 
                 int lastPack = (int) data[2];
@@ -32,10 +36,16 @@ public class Receiver1a {
                     System.out.println("File received.");
 
                     out.close();
-                    socket.close();
+                    recSocket.close();
                 }
             }
         } catch (Exception e) {}
+    }
+
+    public static void sendAcknowledgement(short packNum) {
+        byte[] sendByte = ByteBuffer.allocate(2).putShort(packNum).array();
+        
+
     }
 
     public static void main(String args[]) throws IOException {
@@ -45,4 +55,5 @@ public class Receiver1a {
         receive(port, filename);
 
     }
+
 }
