@@ -11,12 +11,15 @@ import java.nio.ByteBuffer;
  */
 public class Sender1b {
 
-//    private long start = System.currentTimeMillis();
 
     private static void send(InetAddress address, int portNum, String filename, int RetryTimeout) throws IOException {
+        long starttime = System.currentTimeMillis();
+
         DatagramSocket socket = new DatagramSocket();
         System.out.println("Socket connected");
         byte[] buffer = new byte[1024];
+        int retransmissions = 0;
+        int numBytes = 0;
 
         try {
             FileInputStream in = new FileInputStream(filename);
@@ -25,7 +28,6 @@ public class Sender1b {
             boolean last = false;
             //Create different socket for receiver
             DatagramSocket recSocket = new DatagramSocket(portNum+1);
-            boolean acknowledged = false;
 
             System.out.println("Sending packet...");
 
@@ -39,6 +41,7 @@ public class Sender1b {
                     packLen = dataLeft;
                     last = true;
                 }
+                numBytes += packLen;
 
                 byte[] bytes = new byte[1027];
                 in.read(bytes, 3, packLen);
@@ -54,10 +57,14 @@ public class Sender1b {
 
                 //Check for acknowledgement
                 System.out.println("Waiting for acknowledgement...");
-                acknowledged = false;
+                boolean acknowledged = false;
                 while(!acknowledged) {
                     acknowledged = isAcknowledged(packNum, RetryTimeout, recSocket);
-                    socket.send(sendPacket);
+                    if (acknowledged) break;
+                    else {
+                        retransmissions++;
+                        socket.send(sendPacket);
+                    }
                 }
                 packNum++;
                 Thread.sleep(10);
@@ -67,8 +74,21 @@ public class Sender1b {
         } catch (Exception e){
             System.out.println(e);
         }
-        System.out.println("File sent!");
         socket.close();
+
+        long endtime = System.currentTimeMillis();
+        System.out.println("File sent!");
+        System.out.println("Number of retransmissions: " + retransmissions);
+        long time = endtime-starttime;
+        time = (long) (time*0.001);
+        long kb = (long) (numBytes*0.001);
+
+        long throughputRate = kb/time;
+        System.out.println("Time for transfer: " + time + " sec");
+        System.out.println("Num of bytes: " + kb + "kb");
+        System.out.println("Throughput rate: " + throughputRate + "kb/s");
+
+
 
     }
 
