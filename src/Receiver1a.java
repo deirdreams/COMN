@@ -16,6 +16,7 @@ public class Receiver1a {
             boolean fileReceived = false;
             System.out.println("Receiving file...");
 
+            //runs while the file is not received
             while (!fileReceived) {
 
                 byte[] buffer = new byte[1027];
@@ -23,14 +24,17 @@ public class Receiver1a {
                 socket.receive(recPacket);
                 byte[] data = recPacket.getData();
 
+                //check for the flag, which is the third value in the received data (see Sender1a)
+                // can be 0 or 1
                 int lastPack = (int) data[2];
 
+                //write to the buffer with offset of 3, which is the header, and file size of 1024
                 out.write(buffer, 3, 1024);
 
                 if (lastPack == 1) {
                     fileReceived = true;
                     System.out.println("File received.");
-
+                    //close socket and output stream when the last packet is received
                     out.close();
                     socket.close();
                 }
