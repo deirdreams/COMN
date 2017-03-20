@@ -188,10 +188,13 @@ public class Sender2a {
         int packetNumber;
         DatagramPacket data;
         long timeSent;
+        boolean ack;
+
         public Packet(int num, DatagramPacket data, long time) {
             this.packetNumber = num;
             this.data = data;
             this.timeSent = time;
+            this.ack = false;
         }
     }
 }
