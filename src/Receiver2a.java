@@ -22,26 +22,26 @@ public class Receiver2a {
             short packNum = 0;
 
             boolean fileReceived = false;
-            //initialised so that lastPackNum == pacKNum is false; number cannot be 2
-            int lastPackNum = 2;
+            //initialised so that lastPackNum == pacKNum is false; number cannot be -1
+            int lastPackNum = -1;
 
             System.out.println("Receiving file...");
 
             while (!fileReceived) {
-                //File is 1024 bytes plus 3 for offset
+                //File is 1024 bytes plus 3 for offset, ie max size
                 byte[] buffer = new byte[1027];
                 DatagramPacket recPacket = new DatagramPacket(buffer, buffer.length);
                 recSocket.receive(recPacket);
                 byte[] data = recPacket.getData();
+                //adjust size of buffer
+                buffer = new byte[data.length];
+
 
                 //Real file starts at data[3] because of an offset of 3
                 byte[] offset = Arrays.copyOfRange(data, 0, 2);
                 packNum = ByteBuffer.wrap(offset).getShort();
 
-                System.out.println("Sending Acknowledgement");
-                //Attempting to send acknowledgements
-
-                //if packet has already been seen
+                //if packet has already been seen, send ACK
                 if (lastPackNum >= packNum) {
                     InetAddress recPackAddress = recPacket.getAddress();
                     sendAck(packNum, portNum, recSocket, recPackAddress);
@@ -56,6 +56,7 @@ public class Receiver2a {
                     if (lastPack == 1) {
                         fileReceived = true;
                         System.out.println("File received.");
+
                         //Close output stream and socket
                         out.close();
                         recSocket.close();
@@ -63,7 +64,6 @@ public class Receiver2a {
                     //change lastPackNum for next execution of while loop
                     lastPackNum = packNum;
                 }
-
             }
         } catch (Exception e) {}
     }
@@ -76,12 +76,13 @@ public class Receiver2a {
             //Strange error if using the same port number as receiving socket so add 1 to change
             DatagramPacket sendPack = new DatagramPacket(sendByte, sendByte.length, add, portNum + 1);
             socket.send(sendPack);
-            System.out.println("Acknowledgement Sent!");
         } catch (IOException e) {}
     }
 
-    public static void main(String[] args) {
-        int port = Integer.parseInt(args[1]);
-        String filename = args[2];
+    public static void main(String[] args) throws IOException {
+        int port = Integer.parseInt(args[0]);
+        String filename = args[1];
+
+        receive(port, filename);
     }
 }

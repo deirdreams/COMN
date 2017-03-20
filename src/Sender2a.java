@@ -18,6 +18,7 @@ public class Sender2a {
 
     //Used for the while loop in Ack class to stop the run method
     private static boolean StopAckRun = false;
+    public static int ackedPackNum = -1;
 
     public static void send(InetAddress address, int portNum, String filename, int RetryTimeout, int N) throws IOException {
         long starttime = System.currentTimeMillis();
@@ -25,12 +26,11 @@ public class Sender2a {
         DatagramSocket socket = new DatagramSocket();
         System.out.println("Socket connected");
         //An ArrayList to keep track of the packets that have been ack'ed
-        ArrayList<Packet> ackedPackets = new ArrayList<>();
-        int ackedPackNum = -1;
+        ArrayList<Packet> ackedPackets = new ArrayList<Packet>();
         long timer;
+        int numBytes = 0;
 
         byte[] buffer = new byte[1024];
-        int numBytes = 0;
 
         try {
             File file = new File(filename);
@@ -46,15 +46,15 @@ public class Sender2a {
 
             //Starting threat
             Acknowledge Ack = new Acknowledge(portNum, timeout);
+            Ack.start();
+
             System.out.println("Sending packets...");
 
             while (loop) {
-
                 //if the packet number has been acknowledged, remove that and the previous ones that have been
                 //acknowledged before it so we can "shift" the window
-                while (ackedPackets.size() > 0 && ackedPackets.get(0).packNum <= ackedPackNum) {
+                while (ackedPackets.size() > 0 && ackedPackets.get(0).packetNumber <= ackedPackNum) {
                     ackedPackets.remove(0);
-
                 }
 
                 //check if we are still within the window size for the list of acknowledged packets
@@ -67,7 +67,7 @@ public class Sender2a {
                         packLen = dataLeft;
                         last = true;
                         //Start timer after finishing last iteration of loop
-                        timer = System.currentTimeMillis();
+//                        timer = System.currentTimeMillis();
                     }
                     numBytes += packLen;
 
@@ -105,20 +105,36 @@ public class Sender2a {
                         Packet currPack = ackedPackets.get(i);
                         //resend data and store back into array list
                         socket.send(currPack.data);
+                        ackedPackets.get(i).timeSent = System.currentTimeMillis();
                         currPack.timeSent = System.currentTimeMillis();
                         ackedPackets.set(i, currPack);
                     }
                 }
                 if (last) {
                     loop = false;
-                    StopAckRun = false;
-                    socket.close();
+                    StopAckRun = true;
                 }
             }
 
         } catch (Exception e) {
             System.out.println(e);
         }
+        System.out.println("File sent!");
+        socket.close();
+
+        long endtime = System.currentTimeMillis();
+
+        long time = endtime-starttime;
+        time = (long) (time*0.001);
+        long kb = (long) (numBytes*0.001);
+
+        long throughputRate = kb/time;
+
+        //Print out data for results sheet
+        System.out.println("Time for transfer: " + time + " sec");
+        System.out.println("Num of bytes: " + kb + "kb");
+        System.out.println("Throughput rate: " + throughputRate + "kb/s with N= " + N);
+
     }
 
     public static void main(String[] args) throws IOException {
@@ -132,23 +148,19 @@ public class Sender2a {
 
     }
 
-
     //Create Ack class that implements Runnable interface to create thread
-    private static class Acknowledge implements Runnable {
+    private static class Acknowledge extends Thread{
         DatagramSocket recSocket;
         int timeout;
-        Thread t;
 
         public Acknowledge(int portNum, int timeout) throws SocketException {
             //Create different socket for receiver in different port
             //strange error when using same port number so add 1 to change port num
             this.recSocket = new DatagramSocket(portNum+1);
             this.timeout = timeout;
-            this.t = new Thread(this);
         }
         @Override
         public void run() {
-            t.start();
             while (!StopAckRun) {
                 //Allocate two bytes
                 byte[] recBuf = new byte[2];
@@ -158,13 +170,14 @@ public class Sender2a {
                     recSocket.setSoTimeout(timeout);
                     recSocket.receive(recPacket);
                     byte[] recData = recPacket.getData();
+                    ackedPackNum = ByteBuffer.wrap(recData).getShort();
                 } catch (SocketTimeoutException e){
                     System.out.println(e);
                 } catch (IOException e) {
                     System.out.println(e);
                 }
                 //yield its current use of a processor
-                t.yield();
+                Thread.yield();
             }
 
         }
@@ -172,11 +185,11 @@ public class Sender2a {
 
     //Create Packet class that holds the information we need for acknowledgement
     private static class Packet {
-        int packNum;
+        int packetNumber;
         DatagramPacket data;
         long timeSent;
         public Packet(int num, DatagramPacket data, long time) {
-            this.packNum = num;
+            this.packetNumber = num;
             this.data = data;
             this.timeSent = time;
         }
