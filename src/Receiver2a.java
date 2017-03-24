@@ -24,18 +24,16 @@ public class Receiver2a {
             boolean fileReceived = false;
             //initialised so that lastPackNum == pacKNum is false; number cannot be -1
             int lastPackNum = -1;
+            int bytes_rec = 0;
 
             System.out.println("Receiving file...");
 
             while (!fileReceived) {
-                //File is 1024 bytes plus 3 for offset, ie max size
-                byte[] buffer = new byte[1027];
+
+                byte[] buffer = new byte[1024];
                 DatagramPacket recPacket = new DatagramPacket(buffer, buffer.length);
                 recSocket.receive(recPacket);
                 byte[] data = recPacket.getData();
-                //adjust size of buffer
-                buffer = new byte[data.length];
-
 
                 //Real file starts at data[3] because of an offset of 3
                 byte[] offset = Arrays.copyOfRange(data, 0, 2);
@@ -44,28 +42,34 @@ public class Receiver2a {
                 //if packet has already been seen, send ACK
                 if (lastPackNum >= packNum) {
                     InetAddress recPackAddress = recPacket.getAddress();
-                    sendAck(packNum, portNum, recSocket, recPackAddress);
+                    sendAck(packNum, portNum, sendSocket, recPackAddress);
 
                 //check if packet is next in sequence
                 } else if (lastPackNum + 1 == packNum) {
                     //Check flag
                     int lastPack = (int) data[2];
                     out.write(buffer, 3, data.length-3);
+                    bytes_rec += data.length-3;
+                    InetAddress recPackAddress = recPacket.getAddress();
+                    sendAck(packNum, portNum, sendSocket, recPackAddress);
 
                     //Check if the flag in the data received is 1, ie is the last packet
                     if (lastPack == 1) {
                         fileReceived = true;
-                        System.out.println("File received.");
-
-                        //Close output stream and socket
-                        out.close();
                         recSocket.close();
+                        out.close();
+                        System.out.println("File received.");
+                        System.out.println("Num bytes received: " + bytes_rec);
+
                     }
                     //change lastPackNum for next execution of while loop
                     lastPackNum = packNum;
                 }
             }
-        } catch (Exception e) {}
+
+        } catch (Exception e) {} finally {
+            System.exit(1);
+        }
     }
 
     //new method to send acknowledgement to specified port to sender

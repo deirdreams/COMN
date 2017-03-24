@@ -1,11 +1,9 @@
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,12 +11,13 @@ import java.util.Collections;
 import java.util.Comparator;
 
 /**
- * Created by deirdrebringas on 23/03/2017.
+ * Created by s1368635 on 20/03/17.
  */
-public class Receiver2b {
-    public static void receive(int port, String filename, int N) throws IOException {
+public class Receiver2b_original{
+
+    public static void receive(int portNum, String filename, int N) throws IOException {
         //create sockets for both receiver and sender
-        DatagramSocket recSocket = new DatagramSocket(port);
+        DatagramSocket recSocket = new DatagramSocket(portNum);
         DatagramSocket sendSocket = new DatagramSocket();
         File file = new File(filename);
         FileOutputStream out = new FileOutputStream(file);
@@ -45,55 +44,59 @@ public class Receiver2b {
             byte[] offset = Arrays.copyOfRange(data, 0, 2);
             packNum = ByteBuffer.wrap(offset).getShort();
 
-            //check if the current packet is in the window
-            if (packNum >= base && packNum <= (base + N - 1)) {
-                //if current packet is next in sequence
-                if (packNum == lastPackNum + 1) {
-                    lastPack = (int) data[2];
-                    out.write(data, 3, data.length - 3);
-                    if (lastPack == 1) {
-                        fileReceived = true;
-                    }
-                    lastPackNum++;
-                }
 
-                while (BufferedPackets.size() > 0) {
-                    Packet currPack = BufferedPackets.get(0);
-                    //check if any of the packets in buffer are next in the sequence
-                    if (currPack.packetNumber == lastPackNum+1) {
-                        BufferedPackets.remove(0);
-                        lastPackNum = currPack.packetNumber;
-                        out.write(currPack.data.getData(), 3, currPack.data.getLength()-3);
-                    } else break;
+            //reacknowledge packet if seen before
+            if (packNum <= lastPackNum) {
+                InetAddress recPackAddress = recPacket.getAddress();
+                sendAck(packNum, portNum, sendSocket, recPackAddress);
+            }
+            //if next packet in sequence, write to file, then acknowledge
+            else if (packNum == lastPackNum + 1) {
+                lastPack = (int) data[2];
+                out.write(data, 3, data.length-3);
+                lastPackNum = packNum;
+                InetAddress recPackAddress = recPacket.getAddress();
+                sendAck(packNum, portNum, sendSocket, recPackAddress);
+                if (lastPack == 1) {
+                    fileReceived = true;
                 }
-                base = lastPackNum + 1;
             } else {
-                //out of order so buffer current packet if not already in buffer
+                //Out of sequence packet
+                //if not acknowledged, add to buffer of unack'ed packets
                 Packet p = new Packet(packNum, recPacket);
-                if (!BufferedPackets.contains(p)) {
+                if (BufferedPackets.size() < N) {
                     BufferedPackets.add(p);
                 }
+
+                //packet is out of sequence so reorder buffer so first one is oldest packet received
+//                Collections.sort(BufferedPackets, Comparator.comparingInt(o -> o.packetNumber));
+                Collections.sort(BufferedPackets, new Comparator<Packet>() {
+                    @Override
+                    public int compare(Packet o1, Packet o2) {
+                        return o1.packetNumber - o2.packetNumber;
+                    }
+                });
+                InetAddress recPackAddress = recPacket.getAddress();
+                sendAck(packNum, portNum, sendSocket, recPackAddress);
+
+                while (BufferedPackets.size() > 0 && BufferedPackets.get(0).packetNumber == lastPackNum + 1) {
+                    Packet currPack = BufferedPackets.get(0);
+                    BufferedPackets.remove(0);
+                    lastPackNum = currPack.packetNumber;
+                    out.write(currPack.data.getData(), 3, currPack.data.getLength()-3);
+                }
+
             }
-
-            InetAddress recPackAddress = recPacket.getAddress();
-            sendAck(packNum, port, sendSocket, recPackAddress);
-
-            //resend acknowledgement
-            if (packNum >= 0 && packNum < base) {
-                recPackAddress = recPacket.getAddress();
-                sendAck(packNum, port, sendSocket, recPackAddress);
-            }
-
             if (lastPack == 1) {
                 fileReceived = true;
             }
+
         }
-        System.out.println("File received!");
+        System.out.println("File Received!");
         out.close();
         recSocket.close();
 
     }
-
 
     //new method to send acknowledgement to specified port to sender
     public static void sendAck(short packNum, int portNum, DatagramSocket socket, InetAddress add) throws IOException {

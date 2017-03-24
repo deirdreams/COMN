@@ -15,7 +15,7 @@ import java.util.Comparator;
 /**
  * Created by deirdrebringas on 23/03/2017.
  */
-public class Receiver2b {
+public class Receiver2b_2 {
     public static void receive(int port, String filename, int N) throws IOException {
         //create sockets for both receiver and sender
         DatagramSocket recSocket = new DatagramSocket(port);
@@ -45,12 +45,13 @@ public class Receiver2b {
             byte[] offset = Arrays.copyOfRange(data, 0, 2);
             packNum = ByteBuffer.wrap(offset).getShort();
 
-            //check if the current packet is in the window
             if (packNum >= base && packNum <= (base + N - 1)) {
-                //if current packet is next in sequence
                 if (packNum == lastPackNum + 1) {
                     lastPack = (int) data[2];
                     out.write(data, 3, data.length - 3);
+
+//                    lastPackNum = packNum;
+
                     if (lastPack == 1) {
                         fileReceived = true;
                     }
@@ -59,7 +60,6 @@ public class Receiver2b {
 
                 while (BufferedPackets.size() > 0) {
                     Packet currPack = BufferedPackets.get(0);
-                    //check if any of the packets in buffer are next in the sequence
                     if (currPack.packetNumber == lastPackNum+1) {
                         BufferedPackets.remove(0);
                         lastPackNum = currPack.packetNumber;
@@ -68,17 +68,24 @@ public class Receiver2b {
                 }
                 base = lastPackNum + 1;
             } else {
-                //out of order so buffer current packet if not already in buffer
-                Packet p = new Packet(packNum, recPacket);
+
+                byte[] packBytes = new byte[currPackSize];
+                System.arraycopy(recPacket, 3, packBytes, 0, currPackSize-3);
+
+                Packet p = new Packet(packNum, new DatagramPacket(packBytes, packBytes.length));
                 if (!BufferedPackets.contains(p)) {
                     BufferedPackets.add(p);
                 }
             }
-
+//            Collections.sort(BufferedPackets, new Comparator<Packet>() {
+//                @Override
+//                public int compare(Packet o1, Packet o2) {
+//                    return o1.packetNumber - o2.packetNumber;
+//                }
+//            });
             InetAddress recPackAddress = recPacket.getAddress();
             sendAck(packNum, port, sendSocket, recPackAddress);
 
-            //resend acknowledgement
             if (packNum >= 0 && packNum < base) {
                 recPackAddress = recPacket.getAddress();
                 sendAck(packNum, port, sendSocket, recPackAddress);

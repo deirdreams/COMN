@@ -18,17 +18,18 @@ public class Sender2a {
 
     //Used for the while loop in Ack class to stop the run method
     private static boolean StopAckRun = false;
-    public static int ackedPackNum = -1;
+    private static int ackedPackNum = -1;
 
     public static void send(InetAddress address, int portNum, String filename, int RetryTimeout, int N) throws IOException {
         long starttime = System.currentTimeMillis();
         int timeout = RetryTimeout;
         DatagramSocket socket = new DatagramSocket();
         System.out.println("Socket connected");
-        //An ArrayList to keep track of the packets that have been ack'ed
+        //An ArrayList of packets waiting to be ack'ed
         ArrayList<Packet> ackedPackets = new ArrayList<Packet>();
-        long timer;
+        long timer = 0;
         int numBytes = 0;
+        int retransmissions = 0;
 
         byte[] buffer = new byte[1024];
 
@@ -44,7 +45,7 @@ public class Sender2a {
             boolean retransmit = false;
             boolean loop = true;
 
-            //Starting threat
+            //Starting thread
             Acknowledge Ack = new Acknowledge(portNum, timeout);
             Ack.start();
 
@@ -60,20 +61,20 @@ public class Sender2a {
                 //check if we are still within the window size for the list of acknowledged packets
                 while (!last && ackedPackets.size() < N) {
                     dataLeft = in.available();
-                    if (dataLeft > buffer.length) {
-                        packLen = buffer.length;
+                    if (dataLeft > buffer.length-3) {
+                        packLen = buffer.length-3;
                     } else {
                         //Check if last packet
                         packLen = dataLeft;
                         last = true;
                         //Start timer after finishing last iteration of loop
-//                        timer = System.currentTimeMillis();
+                        timer = System.currentTimeMillis();
                     }
-                    numBytes += packLen;
 
                     //Full size of the file including the header
-                    byte[] bytes = new byte[1027];
+                    byte[] bytes = new byte[packLen + 3];
                     in.read(bytes, 3, packLen);
+                    numBytes += packLen;
 
                     //get the header of the current packet
                     byte[] header = ByteBuffer.allocate(2).putShort(packNum).array();
@@ -108,6 +109,7 @@ public class Sender2a {
                         ackedPackets.get(i).timeSent = System.currentTimeMillis();
                         currPack.timeSent = System.currentTimeMillis();
                         ackedPackets.set(i, currPack);
+                        retransmissions++;
                     }
                 }
                 if (last) {
@@ -133,7 +135,7 @@ public class Sender2a {
         //Print out data for results sheet
         System.out.println("Time for transfer: " + time + " sec");
         System.out.println("Num of bytes: " + kb + "kb");
-        System.out.println("Throughput rate: " + throughputRate + "kb/s with N= " + N);
+        System.out.println("Throughput rate: " + throughputRate + "kb/s with N = " + N);
 
     }
 
@@ -148,7 +150,7 @@ public class Sender2a {
 
     }
 
-    //Create Ack class that implements Runnable interface to create thread
+    //Create Ack class to create thread
     private static class Acknowledge extends Thread{
         DatagramSocket recSocket;
         int timeout;
@@ -188,13 +190,11 @@ public class Sender2a {
         int packetNumber;
         DatagramPacket data;
         long timeSent;
-        boolean ack;
 
         public Packet(int num, DatagramPacket data, long time) {
             this.packetNumber = num;
             this.data = data;
             this.timeSent = time;
-            this.ack = false;
         }
     }
 }
